@@ -1,16 +1,20 @@
 import requests
-
 from time import sleep
-from random import randint
-
 from prometheus_client import start_http_server
 from prometheus_client.core import GaugeMetricFamily, REGISTRY
+import json  # For optional debugging/logging
 
 class ArcadyanCollector:
     def collect(self):
         metrics_url = 'http://192.168.12.1/TMI/v1/gateway?get=all'
-        response = requests.get(metrics_url)
-        json = response.json()
+
+        try:
+            response = requests.get(metrics_url, timeout=3)
+            response.raise_for_status()
+            data = response.json()
+        except Exception as e:
+            print(f"[ERROR] Failed to fetch or parse data: {e}")
+            return  # Do not yield anything on error
 
         rsrp = GaugeMetricFamily('gateway_rsrp', 'RSRP', labels=['nbid', 'cid', 'band'])
         rsrq = GaugeMetricFamily('gateway_rsrq', 'RSRQ', labels=['nbid', 'cid', 'band'])
@@ -23,20 +27,26 @@ class ArcadyanCollector:
             'rssi': rssi,
             'sinr': sinr
         }
-        nbid = str(json['signal']['4g']['eNBID'])
-        cid = str(json['signal']['4g']['cid'])
-        for band in json['signal']['4g']['bands']:
-            for key, metric in json_to_metric.items():
-                metric.add_metric([nbid, cid, band], json['signal']['4g'][key])
 
-        # 5g values are never populated? Assume same as 4g and use those
-        #nbid = json['signal']['5g']['eNBID']
-        #cid = json['signal']['5g']['cid']
-        nbid = str(json['signal']['4g']['eNBID'])
-        cid = str(json['signal']['4g']['cid'])
-        for band in json['signal']['5g']['bands']:
-            for key, metric in json_to_metric.items():
-                metric.add_metric([nbid, cid, band], json['signal']['5g'][key])
+        signal = data.get('signal', {})
+        for gen in ['4g', '5g']:
+            cell = signal.get(gen)
+            if not cell:
+                continue
+
+            nbid = str(cell.get('eNBID', 'unknown'))
+            cid = str(cell.get('cid', 'unknown'))
+            bands = cell.get('bands', [])
+
+            for band in bands:
+                for key, metric in json_to_metric.items():
+                    value = cell.get(key)
+                    if value is not None:
+                        try:
+                            metric.add_metric([nbid, cid, band], float(value))
+                        except (ValueError, TypeError):
+                            print(f"[WARN] Invalid value for {key}: {value}")
+
         yield rsrp
         yield rsrq
         yield rssi
@@ -44,7 +54,7 @@ class ArcadyanCollector:
 
 def main():
     REGISTRY.register(ArcadyanCollector())
-
+    print("[INFO] Exporter started on http://localhost:9715")
     start_http_server(9715)
     while True:
         sleep(1.0)

@@ -1,0 +1,13 @@
+global:
+  scrape_interval: 15s  # Adjust the scrape interval as needed
+
+scrape_configs:
+  - job_name: 'arcadyan_gateway'
+    static_configs:
+      - targets: ['192.168.0.248:9715']
+#   - job_name: 'prometheus'
+#   # Override the global default and scrape targets from this job every 5 seconds.
+#     scrape_interval: 5s
+# 
+#     static_configs:
+#       - targets: ['localhost:9090']

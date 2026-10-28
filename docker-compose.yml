@@ -1,0 +1,18 @@
+services:
+  prometheus:
+    container_name: prometheus
+    restart: always
+    ports:
+      - 9090:9090
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    image: prom/prometheus
+
+  tmhi_pe:
+    build: .
+    container_name: tmhi_prometheus_exporter
+    # environment:
+      # - GATEWAY_IP_ADDRESS=192.168.12.1
+    ports:
+      - "9715:9715"
+    restart: always
